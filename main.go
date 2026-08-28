@@ -16,6 +16,7 @@ import (
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	db             *database.Queries
+	platform       string
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -44,8 +45,14 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Fatal("couldn't read env's from file: %w", err)
 	}
-
 	dbURL := os.Getenv("DB_URL")
+	if dbURL == "" {
+		log.Fatal("DB_URL must be set")
+	}
+	platform := os.Getenv("PLATFORM")
+	if platform == "" {
+		log.Fatal("PLATFORM must be set")
+	}
 
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -57,6 +64,7 @@ func main() {
 	cfg := apiConfig{
 		fileserverHits: atomic.Int32{},
 		db:             dbQueries,
+		platform:       platform,
 	}
 
 	mux := http.NewServeMux()
@@ -64,9 +72,12 @@ func main() {
 	fsHandler := cfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(filepathRoot))))
 	mux.Handle("/app/", fsHandler)
 	mux.HandleFunc("GET /api/healthz", handlerReadiness)
-	mux.HandleFunc("POST /admin/reset", cfg.handlerReset)
 	mux.HandleFunc("GET /admin/metrics", cfg.handlerMetrics)
-	mux.HandleFunc("POST /api/validate_chirp", handlerValidateChirp)
+	mux.HandleFunc("POST /admin/reset", cfg.handlerReset)
+	mux.HandleFunc("POST /api/users", cfg.handlerUsersCreate)
+	mux.HandleFunc("POST /api/chirps", cfg.handlerChirpsCreate)
+	mux.HandleFunc("GET /api/chirps", cfg.handlerGetChirps)
+	mux.HandleFunc("GET /api/chirps/{chirpID}", cfg.handlerGetChirp)
 
 	srv := &http.Server{
 		Addr:    ":" + port,
