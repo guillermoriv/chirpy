@@ -3,22 +3,12 @@ package main
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/guillermoriv/chirpy/internal/auth"
 	"github.com/guillermoriv/chirpy/internal/database"
 )
 
-type User struct {
-	ID          uuid.UUID `json:"id"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	Email       string    `json:"email"`
-	IsChirpyRed bool      `json:"is_chirpy_red"`
-}
-
-func (cfg *apiConfig) handlerUsersCreate(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -32,18 +22,31 @@ func (cfg *apiConfig) handlerUsersCreate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, "couldn't find authorization", http.StatusUnauthorized, err)
+		return
+	}
+
+	userID, err := auth.ValidateJWT(token, cfg.secret)
+	if err != nil {
+		respondWithError(w, "couldn't validate the JWT", http.StatusUnauthorized, err)
+		return
+	}
+
 	hashedPassword, err := auth.HashPassword(params.Password)
 	if err != nil {
 		respondWithError(w, "couldn't hash this password", http.StatusInternalServerError, err)
 		return
 	}
 
-	user, err := cfg.db.CreateUser(r.Context(), database.CreateUserParams{
+	user, err := cfg.db.UpdateUser(r.Context(), database.UpdateUserParams{
 		Email:          params.Email,
 		HashedPassword: hashedPassword,
+		ID:             userID,
 	})
 	if err != nil {
-		respondWithError(w, "couldn't create user", http.StatusInternalServerError, err)
+		respondWithError(w, "couldn't update user information", http.StatusInternalServerError, err)
 		return
 	}
 
@@ -53,5 +56,5 @@ func (cfg *apiConfig) handlerUsersCreate(w http.ResponseWriter, r *http.Request)
 		UpdatedAt:   user.CreatedAt,
 		Email:       user.Email,
 		IsChirpyRed: user.IsChirpyRed,
-	}, http.StatusCreated)
+	}, http.StatusOK)
 }

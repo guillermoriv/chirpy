@@ -6,13 +6,18 @@ import (
 	"time"
 
 	"github.com/guillermoriv/chirpy/internal/auth"
+	"github.com/guillermoriv/chirpy/internal/database"
 )
 
 func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Email            string `json:"email"`
-		Password         string `json:"password"`
-		ExpiresInSeconds *int   `json:"expires_in_seconds"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	type response struct {
+		User
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -21,14 +26,6 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		respondWithError(w, "couldn't decode parameters", http.StatusBadRequest, err)
 		return
-	}
-
-	expirationTime := 1 * time.Hour
-	if params.ExpiresInSeconds != nil {
-		requestedDuration := time.Duration(*params.ExpiresInSeconds) * time.Second
-		if requestedDuration < expirationTime {
-			expirationTime = requestedDuration
-		}
 	}
 
 	user, err := cfg.db.GetUserByEmail(r.Context(), params.Email)
@@ -43,17 +40,27 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := auth.MakeJWT(user.ID, cfg.secret, expirationTime)
+	accessToken, err := auth.MakeJWT(user.ID, cfg.secret, time.Hour)
 	if err != nil {
 		respondWithError(w, "couldn't generate token for user", http.StatusInternalServerError, err)
 		return
 	}
 
-	respondWithJSON(w, User{
-		ID:        user.ID,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Email:     user.Email,
-		Token:     token,
+	refreshToken := auth.MakeRefreshToken()
+
+	err = cfg.db.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{Token: refreshToken, UserID: user.ID, ExpiresAt: time.Now().UTC().AddDate(0, 0, 60)})
+	if err != nil {
+		respondWithError(w, "couldn't save token for user", http.StatusInternalServerError, err)
+		return
+	}
+
+	respondWithJSON(w, response{
+		ID:           user.ID,
+		CreatedAt:    user.CreatedAt,
+		UpdatedAt:    user.UpdatedAt,
+		Email:        user.Email,
+		IsChirpyRed:  user.IsChirpyRed,
+		Token:        accessToken,
+		RefreshToken: refreshToken,
 	}, http.StatusOK)
 }
