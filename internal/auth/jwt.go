@@ -83,3 +83,23 @@ func GetBearerToken(headers http.Header) (string, error) {
 
 	return token, nil
 }
+
+// GetAPIKey -
+func GetAPIKey(headers http.Header) (string, error) {
+	authHeader := headers.Get("Authorization")
+	if authHeader == "" {
+		return "", errors.New("not a authorization header available")
+	}
+
+	const prefix = "ApiKey "
+	if !strings.HasPrefix(authHeader, prefix) {
+		return "", errors.New("malformed authorization header: must start with 'ApiKey '")
+	}
+
+	token := strings.TrimSpace(strings.TrimPrefix(authHeader, prefix))
+	if token == "" {
+		return "", errors.New("no token found after apikey prefix")
+	}
+
+	return token, nil
+}

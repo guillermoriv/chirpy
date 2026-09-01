@@ -18,6 +18,7 @@ type apiConfig struct {
 	db             *database.Queries
 	platform       string
 	secret         string
+	polkaKey       string
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -55,8 +56,12 @@ func main() {
 		log.Fatal("PLATFORM must be set")
 	}
 	secret := os.Getenv("SECRET")
-	if platform == "" {
+	if secret == "" {
 		log.Fatal("SECRET must be set")
+	}
+	polkaKey := os.Getenv("POLKA_KEY")
+	if polkaKey == "" {
+		log.Fatal("POLKA_KEY must be set")
 	}
 
 	db, err := sql.Open("postgres", dbURL)
@@ -71,6 +76,7 @@ func main() {
 		db:             dbQueries,
 		platform:       platform,
 		secret:         secret,
+		polkaKey:       polkaKey,
 	}
 
 	mux := http.NewServeMux()

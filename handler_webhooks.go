@@ -7,9 +7,21 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/guillermoriv/chirpy/internal/auth"
 )
 
 func (cfg *apiConfig) handlerWebhook(w http.ResponseWriter, r *http.Request) {
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil {
+		respondWithError(w, "couldn't retrieve apiKey", http.StatusUnauthorized, err)
+		return
+	}
+
+	if apiKey != cfg.polkaKey {
+		respondWithError(w, "unauthorized", http.StatusUnauthorized, err)
+		return
+	}
+
 	type parameters struct {
 		Event string `json:"event"`
 		Data  struct {
@@ -19,7 +31,7 @@ func (cfg *apiConfig) handlerWebhook(w http.ResponseWriter, r *http.Request) {
 
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
-	err := decoder.Decode(&params)
+	err = decoder.Decode(&params)
 	if err != nil {
 		respondWithError(w, "couldn't decode parameters", http.StatusInternalServerError, err)
 		return
